@@ -16,10 +16,8 @@ import (
 	"time"
 )
 
-//Version is version
-const Version = "1.0.2"
+const Version = "1.0.3"
 
-// Result to show what we've found
 type Result struct {
 	domain   string
 	title    string
@@ -58,30 +56,33 @@ func DoRequest(domain string) interface{} {
 	req, err := http.NewRequest("GET", domain, nil)
 	req.Header.Set("Accept-Encoding", "")
 	resp, err := client.Do(req)
-	if err == nil {
-		if resp.Body != nil {
-			defer resp.Body.Close()
-			body, err := ioutil.ReadAll(resp.Body)
-			if err == nil {
-				title := pTitle.FindStringSubmatch(string(body))
-				if title != nil {
-					if len(title) == 2 {
-						sTitle := title[1]
-						if !utf8.ValidString(title[1]) {
-							sTitle = mahonia.NewDecoder("gb18030").ConvertString(title[1])
-						}
-						result.title = sTitle
-					}
-				} else {
-					result.title = "无标题"
-				}
-			} else {
-				result.title = err.Error()
+	if err != nil {
+		r.Println(result.domain, err.Error())
+		return nil
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		r.Println(result.domain, err.Error())
+		return nil
+	}
+
+	titleArr := pTitle.FindStringSubmatch(string(body))
+	if titleArr != nil {
+		if len(titleArr) == 2 {
+			sTitle := titleArr[1]
+			if !utf8.ValidString(sTitle) {
+				sTitle = mahonia.NewDecoder("gb18030").ConvertString(sTitle)
 			}
+			result.title = sTitle
+		} else {
+			result.title = "无标题"
 		}
 	} else {
-		result.title = err.Error()
+		result.title = "无标题"
 	}
+
 	return result
 }
 
@@ -125,7 +126,6 @@ func main() {
 // Print some stats
 func printStats() {
 	m.UpdateStats()
-
 	fmt.Println("")
 	fmt.Println("Requests :", m.Stats.Execs)
 	fmt.Println("Results  :", m.Stats.Results)
