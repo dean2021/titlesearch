@@ -1,0 +1,8 @@
+titlesearch
+titlesearch.exe
+*.sw*
+vendor/
+build/
+!.gitkeep
+results/*.html
+.idea
