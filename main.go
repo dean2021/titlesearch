@@ -3,20 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"strings"
+	"github.com/axgle/mahonia"
 	"github.com/evilsocket/brutemachine"
 	"github.com/fatih/color"
+	"github.com/valyala/fasthttp"
+	"os"
 	"regexp"
-	"net/http"
-	"io/ioutil"
-	"unicode/utf8"
-	"github.com/axgle/mahonia"
-	"net"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
-const Version = "1.0.3"
+const Version = "1.0.4"
 
 type Result struct {
 	domain   string
@@ -41,34 +39,31 @@ func DoRequest(domain string) interface{} {
 	if strings.Contains(domain, "http://") == false && strings.Contains(domain, "https://") == false {
 		domain = "http://" + domain
 	}
-	client := &http.Client{Transport: &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
-			deadline := time.Now().Add(time.Duration(*timeout) * time.Second)
-			c, err := net.DialTimeout(network, addr, time.Second*20)
-			if err != nil {
-				return nil, err
-			}
-			c.SetDeadline(deadline)
-			return c, nil
-		},
-	},}
+
+	request := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(request)
+	client := fasthttp.Client{
+		MaxConnWaitTimeout: time.Duration(*timeout) * time.Second,
+	}
+
 	result.domain = domain
-	req, err := http.NewRequest("GET", domain, nil)
-	req.Header.Set("Accept-Encoding", "")
-	resp, err := client.Do(req)
-	if err != nil {
-		r.Println(result.domain, err.Error())
+
+	request.SetRequestURI(domain)
+	request.Header.SetMethod("GET")
+	request.Header.Set("Accept-Encoding", "")
+
+	response := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(response)
+
+	if err := client.DoRedirects(request, response, 3); err != nil {
+		_, err := r.Println(result.domain, err.Error())
+		if err != nil {
+			return nil
+		}
 		return nil
 	}
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		r.Println(result.domain, err.Error())
-		return nil
-	}
-
-	titleArr := pTitle.FindStringSubmatch(string(body))
+	titleArr := pTitle.FindStringSubmatch(string(response.Body()))
 	if titleArr != nil {
 		if len(titleArr) == 2 {
 			sTitle := titleArr[1]
@@ -76,13 +71,8 @@ func DoRequest(domain string) interface{} {
 				sTitle = mahonia.NewDecoder("gb18030").ConvertString(sTitle)
 			}
 			result.title = sTitle
-		} else {
-			result.title = "无标题"
 		}
-	} else {
-		result.title = "无标题"
 	}
-
 	return result
 }
 
